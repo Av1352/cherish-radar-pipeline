@@ -526,7 +526,7 @@ export default function App() {
 
       {/* TAB: How It Works */}
       {activeTab === "how" && (
-        <div style={{ maxWidth: 720 }}>
+        <div style={{ width: "100%" }}>
           <SectionHeader>The Annotation Bottleneck Problem</SectionHeader>
           <p style={{ fontSize: "0.86rem", color: "#94a3b8", lineHeight: 1.7, marginBottom: 20 }}>
             Cherish collects radar data in-house from devices deployed in people's homes. As the number of devices scales up, the volume of incoming sessions grows faster than a human annotation team can review. The core problem is not data collection — it is annotation throughput.
@@ -550,13 +550,13 @@ export default function App() {
               content: `Low classifier confidence indicates the model encountered something ambiguous — a posture, movement, or environmental condition it has not seen enough of during training. These sessions are the highest-value annotation targets: they represent genuine edge cases that, once labeled and added to training data, most improve model performance. They are surfaced to human annotators as a priority.`
             },
           ].map(({ title, color, content }) => (
-            <div key={title} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "14px 18px", marginBottom: 12 }}>
+            <div key={title} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "18px 24px", marginBottom: 12 }}>
               <div style={{ fontSize: "0.82rem", fontWeight: 600, color, marginBottom: 6 }}>{title}</div>
               <div style={{ fontSize: "0.82rem", color: "#94a3b8", lineHeight: 1.65 }}>{content}</div>
             </div>
           ))}
 
-          <SectionHeader style={{ marginTop: 20 }}>Priority Ordering in the Review Queue</SectionHeader>
+          <SectionHeader>Priority Ordering in the Review Queue</SectionHeader>
           <p style={{ fontSize: "0.86rem", color: "#94a3b8", lineHeight: 1.7 }}>
             Fall events are surfaced first regardless of other quality scores — a missed or incorrectly labeled fall event is a patient safety issue with real consequences. Within each event type, sessions are ordered by drift score: the more a session deviates from the training distribution, the more valuable its annotation.
           </p>
