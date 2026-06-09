@@ -5,9 +5,9 @@ import { useState, useMemo } from "react";
 // would do in production: combine multiple signal quality indicators into
 // a single actionable decision with an explainable reason.
 
-const SNR_REJECT_THRESHOLD = 12;      // dB — below this, signal too noisy
-const DRIFT_REVIEW_THRESHOLD = 0.45;  // above this, distribution has shifted
-const CONF_REVIEW_THRESHOLD = 0.72;   // below this, classifier is uncertain
+const SNR_REJECT_THRESHOLD = 14;      // dB — below this, signal too noisy
+const DRIFT_REVIEW_THRESHOLD = 0.35;  // above this, distribution has shifted
+const CONF_REVIEW_THRESHOLD = 0.78;   // below this, classifier is uncertain
 
 function triageSession(session) {
   // Rule 1: Signal quality gate
@@ -86,20 +86,27 @@ function generateSessions(n = 120) {
       if (r < cum) { event = EVENT_TYPES[j]; break; }
     }
 
-    // Realistic SNR distribution: most sessions decent, some noisy
-    // Fall events tend to have lower SNR (brief, rapid movement)
-    const baseSNR = event === "fall_event" ? 13 : 19;
-    const snr = Math.max(5, Math.min(32, baseSNR + (rng() - 0.5) * 14));
+    // ~10% of sessions have low SNR (reject bucket)
+    // Most sessions have good SNR 18-28dB
+    const snrRoll = rng();
+    const snr = snrRoll < 0.10
+      ? Math.round((8 + rng() * 5) * 10) / 10   // 8-13 dB — noisy, reject
+      : Math.round((18 + rng() * 10) * 10) / 10; // 18-28 dB — clean
 
-    // Drift: older sessions and some devices have more drift
-    const deviceDrift = parseInt(DEVICES[Math.floor(rng() * DEVICES.length)].split("-")[1]) > 9 ? 0.2 : 0;
-    const drift = Math.max(0, Math.min(0.95, 0.15 + rng() * 0.5 + deviceDrift));
+    // ~20% of sessions have high drift (review bucket)
+    const driftRoll = rng();
+    const deviceDrift = parseInt(DEVICES[Math.floor(rng() * DEVICES.length)].split("-")[1]) > 9 ? 0.15 : 0;
+    const drift = driftRoll < 0.20
+      ? Math.round((0.40 + rng() * 0.45 + deviceDrift) * 1000) / 1000  // 0.4-0.85 — drifted
+      : Math.round((0.05 + rng() * 0.28 + deviceDrift) * 1000) / 1000; // 0.05-0.33 — stable
 
-    // Confidence: correlated with SNR (better signal = more confident classifier)
-    const conf = Math.max(0.4, Math.min(0.99, (snr / 32) * 0.6 + rng() * 0.4));
+    // Confidence correlated with SNR; ~15% low confidence
+    const confRoll = rng();
+    const conf = confRoll < 0.15
+      ? Math.round((0.50 + rng() * 0.25) * 1000) / 1000  // 0.5-0.75 — uncertain
+      : Math.round((0.80 + rng() * 0.18) * 1000) / 1000; // 0.8-0.98 — confident
 
-    // Point cloud density: sparse = noisy environment
-    const density = Math.round(50 + rng() * 450);
+    const density = Math.round(100 + rng() * 400);
 
     sessions.push({
       id: `S${String(i + 1).padStart(5, "0")}`,
@@ -107,9 +114,9 @@ function generateSessions(n = 120) {
       device: DEVICES[Math.floor(rng() * DEVICES.length)],
       location: LOCATIONS[Math.floor(rng() * LOCATIONS.length)],
       event_type: event,
-      snr_db: Math.round(snr * 10) / 10,
-      classifier_confidence: Math.round(conf * 1000) / 1000,
-      drift_score: Math.round(drift * 1000) / 1000,
+      snr_db: snr,
+      classifier_confidence: conf,
+      drift_score: drift,
       duration_sec: Math.round(15 + rng() * 285),
       point_cloud_density: density,
       motion_variance: Math.round((0.1 + rng() * 0.9) * 1000) / 1000,
@@ -270,20 +277,20 @@ export default function App() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.text, fontFamily: "'Inter', -apple-system, sans-serif", padding: "28px 36px" }}>
+    <div style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.text, fontFamily: "'Inter', -apple-system, sans-serif", padding: "24px 40px", width: "100%", boxSizing: "border-box" }}>
 
       {/* Header */}
       <div style={{ paddingBottom: 24, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 28 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, justifyContent: "center" }}>
           <span style={{ fontSize: "0.65rem", fontWeight: 700, color: COLORS.blue, textTransform: "uppercase", letterSpacing: "0.1em", background: "#0a1628", padding: "3px 10px", borderRadius: 4, border: `1px solid ${COLORS.borderAccent}` }}>📡 Cherish Health</span>
           <span style={{ fontSize: "0.72rem", color: COLORS.textMuted }}>Radar Data Annotation Pipeline · Quality Gatekeeper</span>
         </div>
-        <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "#f0f9ff", letterSpacing: "-0.02em", margin: "0 0 8px 0" }}>Annotation Triage System</h1>
-        <p style={{ fontSize: "0.86rem", color: COLORS.textMuted, maxWidth: 640, lineHeight: 1.65, margin: "0 0 12px 0" }}>
+        <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "#f0f9ff", letterSpacing: "-0.02em", margin: "0 0 8px 0", textAlign: "center" }}>Annotation Triage System</h1>
+        <p style={{ fontSize: "0.86rem", color: COLORS.textMuted, maxWidth: 640, lineHeight: 1.65, margin: "0 auto 12px auto", textAlign: "center" }}>
           Automatically routes incoming radar sessions to <strong style={{ color: COLORS.green }}>auto-label</strong>, <strong style={{ color: COLORS.yellow }}>human review</strong>, or <strong style={{ color: COLORS.red }}>reject</strong> — so annotators spend time only on sessions that matter.
           Every decision is explained.
         </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: "0.75rem", color: COLORS.textMuted }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: "0.75rem", color: COLORS.textMuted, justifyContent: "center" }}>
           <span><span style={{ color: COLORS.green, fontWeight: 600 }}>{((stats.approved / stats.total) * 100).toFixed(0)}%</span> auto-approved</span>
           <span><span style={{ color: COLORS.yellow, fontWeight: 600 }}>{stats.review}</span> in review queue</span>
           <span><span style={{ color: COLORS.red, fontWeight: 600 }}>{stats.rejected}</span> rejected</span>
@@ -467,101 +474,96 @@ export default function App() {
             })}
           </div>
         </div>
-  )
-}
+      )}
 
-{/* TAB: Session Explorer */ }
-{
-  activeTab === "explorer" && (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-        {[
-          ["Decision", decisionFilter, setDecisionFilter, [["all", "All decisions"], ["AUTO_APPROVE", "Auto-approved"], ["REVIEW", "Needs review"], ["REJECT", "Rejected"]]],
-          ["Event Type", eventFilter, setEventFilter, [["all", "All events"], ...EVENT_TYPES.map(t => [t, EVENT_LABELS[t]])]],
-        ].map(([label, val, setter, options]) => (
-          <div key={label}>
-            <div style={{ fontSize: "0.65rem", fontWeight: 600, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 5 }}>{label}</div>
-            <select value={val} onChange={e => setter(e.target.value)} style={{ width: "100%", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 6, color: COLORS.text, padding: "7px 10px", fontSize: "0.82rem" }}>
-              {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ fontSize: "0.72rem", color: COLORS.textDim, marginBottom: 10 }}>{filtered.length} sessions</div>
-
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.76rem" }}>
-          <thead>
-            <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-              {["ID", "Time", "Device", "Event", "SNR (dB)", "Drift", "Confidence", "Decision", "Primary Factor"].map(h => (
-                <th key={h} style={{ padding: "7px 10px", textAlign: "left", color: COLORS.textDim, fontWeight: 600, fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.slice(0, 40).map(s => (
-              <tr key={s.id} style={{ borderBottom: `1px solid #0a0e18` }}>
-                <td style={{ padding: "6px 10px", color: COLORS.textMuted, fontFamily: "monospace" }}>{s.id}</td>
-                <td style={{ padding: "6px 10px", color: COLORS.textDim, whiteSpace: "nowrap" }}>{s.timestamp.toLocaleTimeString("en-US", { hour12: false })}</td>
-                <td style={{ padding: "6px 10px", color: COLORS.textMuted, fontFamily: "monospace" }}>{s.device}</td>
-                <td style={{ padding: "6px 10px" }}><EventBadge type={s.event_type} /></td>
-                <td style={{ padding: "6px 10px", color: s.snr_db >= SNR_REJECT_THRESHOLD ? COLORS.green : COLORS.red, fontFamily: "monospace" }}>{s.snr_db}</td>
-                <td style={{ padding: "6px 10px", color: s.drift_score > DRIFT_REVIEW_THRESHOLD ? COLORS.yellow : COLORS.textDim, fontFamily: "monospace" }}>{s.drift_score.toFixed(3)}</td>
-                <td style={{ padding: "6px 10px", color: s.classifier_confidence >= CONF_REVIEW_THRESHOLD ? COLORS.green : COLORS.yellow, fontFamily: "monospace" }}>{(s.classifier_confidence * 100).toFixed(1)}%</td>
-                <td style={{ padding: "6px 10px" }}><DecisionBadge decision={s.triage.decision} /></td>
-                <td style={{ padding: "6px 10px", color: COLORS.textDim, fontSize: "0.7rem" }}>{FACTOR_LABELS[s.triage.primary_factor]}</td>
-              </tr>
+      {/* TAB: Session Explorer */}
+      {activeTab === "explorer" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+            {[
+              ["Decision", decisionFilter, setDecisionFilter, [["all", "All decisions"], ["AUTO_APPROVE", "Auto-approved"], ["REVIEW", "Needs review"], ["REJECT", "Rejected"]]],
+              ["Event Type", eventFilter, setEventFilter, [["all", "All events"], ...EVENT_TYPES.map(t => [t, EVENT_LABELS[t]])]],
+            ].map(([label, val, setter, options]) => (
+              <div key={label}>
+                <div style={{ fontSize: "0.65rem", fontWeight: 600, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 5 }}>{label}</div>
+                <select value={val} onChange={e => setter(e.target.value)} style={{ width: "100%", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 6, color: COLORS.text, padding: "7px 10px", fontSize: "0.82rem" }}>
+                  {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
+          </div>
 
-{/* TAB: How It Works */ }
-{
-  activeTab === "how" && (
-    <div style={{ maxWidth: 720 }}>
-      <SectionHeader>The Annotation Bottleneck Problem</SectionHeader>
-      <p style={{ fontSize: "0.86rem", color: "#94a3b8", lineHeight: 1.7, marginBottom: 20 }}>
-        Cherish collects radar data in-house from devices deployed in people's homes. As the number of devices scales up, the volume of incoming sessions grows faster than a human annotation team can review. The core problem is not data collection — it is annotation throughput.
-      </p>
+          <div style={{ fontSize: "0.72rem", color: COLORS.textDim, marginBottom: 10 }}>{filtered.length} sessions</div>
 
-      <SectionHeader>The Three Quality Gates</SectionHeader>
-      {[
-        {
-          title: "Gate 1: Signal Quality (SNR)",
-          color: COLORS.red,
-          content: `Signal-to-Noise Ratio measures how strong the actual radar reflection is compared to background noise. A session with SNR below ${SNR_REJECT_THRESHOLD} dB is dominated by noise — even a human annotator cannot reliably label what happened. Annotating these sessions adds incorrect labels to the training dataset, which degrades model performance. These sessions are rejected immediately.`
-        },
-        {
-          title: "Gate 2: Distribution Drift",
-          color: COLORS.yellow,
-          content: `When a device is installed in a new environment — tile walls, a different room geometry, furniture placement — the statistical distribution of its radar data shifts from the training baseline. The classifier may produce high-confidence predictions on out-of-distribution data, but those predictions are unreliable. Drift is detected by comparing session feature statistics against the baseline using Z-score analysis. Drifted sessions are flagged for human review — they are also the most valuable sessions to annotate, as they expand the training distribution.`
-        },
-        {
-          title: "Gate 3: Classifier Confidence",
-          color: COLORS.blue,
-          content: `Low classifier confidence indicates the model encountered something ambiguous — a posture, movement, or environmental condition it has not seen enough of during training. These sessions are the highest-value annotation targets: they represent genuine edge cases that, once labeled and added to training data, most improve model performance. They are surfaced to human annotators as a priority.`
-        },
-      ].map(({ title, color, content }) => (
-        <div key={title} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "14px 18px", marginBottom: 12 }}>
-          <div style={{ fontSize: "0.82rem", fontWeight: 600, color, marginBottom: 6 }}>{title}</div>
-          <div style={{ fontSize: "0.82rem", color: "#94a3b8", lineHeight: 1.65 }}>{content}</div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.76rem" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                  {["ID", "Time", "Device", "Event", "SNR (dB)", "Drift", "Confidence", "Decision", "Primary Factor"].map(h => (
+                    <th key={h} style={{ padding: "7px 10px", textAlign: "left", color: COLORS.textDim, fontWeight: 600, fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.slice(0, 40).map(s => (
+                  <tr key={s.id} style={{ borderBottom: `1px solid #0a0e18` }}>
+                    <td style={{ padding: "6px 10px", color: COLORS.textMuted, fontFamily: "monospace" }}>{s.id}</td>
+                    <td style={{ padding: "6px 10px", color: COLORS.textDim, whiteSpace: "nowrap" }}>{s.timestamp.toLocaleTimeString("en-US", { hour12: false })}</td>
+                    <td style={{ padding: "6px 10px", color: COLORS.textMuted, fontFamily: "monospace" }}>{s.device}</td>
+                    <td style={{ padding: "6px 10px" }}><EventBadge type={s.event_type} /></td>
+                    <td style={{ padding: "6px 10px", color: s.snr_db >= SNR_REJECT_THRESHOLD ? COLORS.green : COLORS.red, fontFamily: "monospace" }}>{s.snr_db}</td>
+                    <td style={{ padding: "6px 10px", color: s.drift_score > DRIFT_REVIEW_THRESHOLD ? COLORS.yellow : COLORS.textDim, fontFamily: "monospace" }}>{s.drift_score.toFixed(3)}</td>
+                    <td style={{ padding: "6px 10px", color: s.classifier_confidence >= CONF_REVIEW_THRESHOLD ? COLORS.green : COLORS.yellow, fontFamily: "monospace" }}>{(s.classifier_confidence * 100).toFixed(1)}%</td>
+                    <td style={{ padding: "6px 10px" }}><DecisionBadge decision={s.triage.decision} /></td>
+                    <td style={{ padding: "6px 10px", color: COLORS.textDim, fontSize: "0.7rem" }}>{FACTOR_LABELS[s.triage.primary_factor]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      ))}
+      )}
 
-      <SectionHeader style={{ marginTop: 20 }}>Priority Ordering in the Review Queue</SectionHeader>
-      <p style={{ fontSize: "0.86rem", color: "#94a3b8", lineHeight: 1.7 }}>
-        Fall events are surfaced first regardless of other quality scores — a missed or incorrectly labeled fall event is a patient safety issue with real consequences. Within each event type, sessions are ordered by drift score: the more a session deviates from the training distribution, the more valuable its annotation.
-      </p>
-    </div>
-  )
-}
+      {/* TAB: How It Works */}
+      {activeTab === "how" && (
+        <div style={{ maxWidth: 720 }}>
+          <SectionHeader>The Annotation Bottleneck Problem</SectionHeader>
+          <p style={{ fontSize: "0.86rem", color: "#94a3b8", lineHeight: 1.7, marginBottom: 20 }}>
+            Cherish collects radar data in-house from devices deployed in people's homes. As the number of devices scales up, the volume of incoming sessions grows faster than a human annotation team can review. The core problem is not data collection — it is annotation throughput.
+          </p>
 
-{/* Footer */ }
+          <SectionHeader>The Three Quality Gates</SectionHeader>
+          {[
+            {
+              title: "Gate 1: Signal Quality (SNR)",
+              color: COLORS.red,
+              content: `Signal-to-Noise Ratio measures how strong the actual radar reflection is compared to background noise. A session with SNR below ${SNR_REJECT_THRESHOLD} dB is dominated by noise — even a human annotator cannot reliably label what happened. Annotating these sessions adds incorrect labels to the training dataset, which degrades model performance. These sessions are rejected immediately.`
+            },
+            {
+              title: "Gate 2: Distribution Drift",
+              color: COLORS.yellow,
+              content: `When a device is installed in a new environment — tile walls, a different room geometry, furniture placement — the statistical distribution of its radar data shifts from the training baseline. The classifier may produce high-confidence predictions on out-of-distribution data, but those predictions are unreliable. Drift is detected by comparing session feature statistics against the baseline using Z-score analysis. Drifted sessions are flagged for human review — they are also the most valuable sessions to annotate, as they expand the training distribution.`
+            },
+            {
+              title: "Gate 3: Classifier Confidence",
+              color: COLORS.blue,
+              content: `Low classifier confidence indicates the model encountered something ambiguous — a posture, movement, or environmental condition it has not seen enough of during training. These sessions are the highest-value annotation targets: they represent genuine edge cases that, once labeled and added to training data, most improve model performance. They are surfaced to human annotators as a priority.`
+            },
+          ].map(({ title, color, content }) => (
+            <div key={title} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "14px 18px", marginBottom: 12 }}>
+              <div style={{ fontSize: "0.82rem", fontWeight: 600, color, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: "0.82rem", color: "#94a3b8", lineHeight: 1.65 }}>{content}</div>
+            </div>
+          ))}
+
+          <SectionHeader style={{ marginTop: 20 }}>Priority Ordering in the Review Queue</SectionHeader>
+          <p style={{ fontSize: "0.86rem", color: "#94a3b8", lineHeight: 1.7 }}>
+            Fall events are surfaced first regardless of other quality scores — a missed or incorrectly labeled fall event is a patient safety issue with real consequences. Within each event type, sessions are ordered by drift score: the more a session deviates from the training distribution, the more valuable its annotation.
+          </p>
+        </div>
+      )}
+
+      {/* Footer */}
       <div style={{ marginTop: 44, paddingTop: 18, borderTop: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#334155" }}>
         <span>Built by <strong style={{ color: COLORS.textMuted }}>Anju Vilashni Nandhakumar</strong> · MS AI, Northeastern University</span>
         <a href="https://www.vxanju.com" style={{ color: COLORS.blue, textDecoration: "none" }}>www.vxanju.com</a>
@@ -574,6 +576,6 @@ export default function App() {
         ::-webkit-scrollbar-track { background: #0a0e18; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
       `}</style>
-    </div >
+    </div>
   );
 }
